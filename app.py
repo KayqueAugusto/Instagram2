@@ -2,7 +2,7 @@ from flask import Flask, render_template, request
 import json
 import io
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder="static", template_folder="templates")
 
 
 def load_json(file_storage):
