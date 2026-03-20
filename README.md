@@ -177,4 +177,3 @@ Desenvolvedor Full Stack
 Projeto para fins educacionais e portfólio.
 
 ---
-Se quiser, eu deixo ele no mesmo nível visual do README do Trampo (com badge, header estilizado e CTA forte) 🚀
