@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="pt-br" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Resultado da Análise</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="bg-orb orb-1"></div>
+    <div class="bg-orb orb-2"></div>
+
+    <div class="page">
+        <header class="topbar result-topbar">
+            <a href="/" class="theme-toggle back-link">← Voltar</a>
+
+            <button class="theme-toggle" onclick="toggleTheme()" id="themeButton">
+                🌙 Tema
+            </button>
+        </header>
+
+        <section class="dashboard-section">
+            <h1 class="dashboard-title">Analisador de Seguidores do Instagram</h1>
+
+            <div class="stats-grid">
+                <button
+                    class="stat-card stat-blue stat-clickable"
+                    data-type="followers"
+                    onclick="changeCategory('followers')"
+                    type="button"
+                >
+                    <div class="stat-icon">👥</div>
+                    <div class="stat-content">
+                        <span class="stat-label">Seguidores</span>
+                        <strong class="stat-number">{{ result.counts.followers }}</strong>
+                    </div>
+                </button>
+
+                <button
+                    class="stat-card stat-green stat-clickable"
+                    data-type="following"
+                    onclick="changeCategory('following')"
+                    type="button"
+                >
+                    <div class="stat-icon">➜</div>
+                    <div class="stat-content">
+                        <span class="stat-label">Você segue</span>
+                        <strong class="stat-number">{{ result.counts.following }}</strong>
+                    </div>
+                </button>
+
+                <button
+                    class="stat-card stat-red stat-clickable"
+                    data-type="not_following_back"
+                    onclick="changeCategory('not_following_back')"
+                    type="button"
+                >
+                    <div class="stat-icon">✖</div>
+                    <div class="stat-content">
+                        <span class="stat-label">Não te seguem</span>
+                        <strong class="stat-number">{{ result.counts.not_following_back }}</strong>
+                    </div>
+                </button>
+            </div>
+
+            <div class="chart-panel">
+                <div class="chart-wrapper">
+                    <canvas id="followersChart"></canvas>
+                </div>
+
+                <div class="chart-legend">
+                    <div class="legend-item">
+                        <span class="legend-dot blue"></span>
+                        <span>Seguidores</span>
+                        <strong>{{ result.counts.followers }}</strong>
+                    </div>
+
+                    <div class="legend-item">
+                        <span class="legend-dot green"></span>
+                        <span>Você segue</span>
+                        <strong>{{ result.counts.following }}</strong>
+                    </div>
+
+                    <div class="legend-item">
+                        <span class="legend-dot red"></span>
+                        <span>Não te seguem</span>
+                        <strong>{{ result.counts.not_following_back }}</strong>
+                    </div>
+                </div>
+            </div>
+
+            <div class="search-row">
+                <input
+                    type="text"
+                    id="searchInput"
+                    class="search-box"
+                    placeholder="Buscar usuário..."
+                >
+            </div>
+
+            <div class="users-panel">
+                <div class="users-panel-header">
+                    <div class="users-title-wrap">
+                        <div class="users-title" id="usersTitle"></div>
+                        <div class="users-subinfo" id="usersSubinfo"></div>
+                    </div>
+
+                    <div class="users-actions">
+                        <button type="button" class="secondary-button" id="showOnlyOpenedBtn">
+                            Só abertos: Off
+                        </button>
+
+                        <button type="button" class="expand-button" id="toggleAllBtn">
+                            Expandir Todos
+                        </button>
+                    </div>
+                </div>
+
+                <div class="users-list-scroll">
+                    <div class="users-list" id="userList"></div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <button class="floating-top-btn" id="backToTopBtn" title="Voltar ao topo">
+        ↑
+    </button>
+
+    <script>
+        const dataSets = {
+            followers: {
+                title: "👥 Seguidores",
+                status: "Te segue",
+                statusClass: "status-blue",
+                items: {{ result.followers_list|tojson }}
+            },
+            following: {
+                title: "➜ Você segue",
+                status: "Você segue",
+                statusClass: "status-green",
+                items: {{ result.following_list|tojson }}
+            },
+            not_following_back: {
+                title: "❌ Seguidores que não te seguem de volta",
+                status: "Não te segue",
+                statusClass: "status-red",
+                items: {{ result.nao_seguem_de_volta|tojson }}
+            }
+        };
+
+        const MAX_VISIBLE = 20;
+        const OPENED_KEY = "instagram_analyzer_opened_profiles";
+
+        let currentCategory = "not_following_back";
+        let expanded = false;
+        let currentFilteredItems = [];
+        let chartInstance = null;
+        let showOnlyOpened = false;
+
+        function formatNumber(value) {
+            return Number(value).toLocaleString("pt-BR");
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement("div");
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function getOpenedProfiles() {
+            try {
+                return JSON.parse(localStorage.getItem(OPENED_KEY)) || [];
+            } catch {
+                return [];
+            }
+        }
+
+        function saveOpenedProfiles(list) {
+            localStorage.setItem(OPENED_KEY, JSON.stringify(list));
+        }
+
+        function markProfileAsOpened(username) {
+            const opened = getOpenedProfiles();
+            if (!opened.includes(username)) {
+                opened.push(username);
+                saveOpenedProfiles(opened);
+            }
+        }
+
+        function isOpenedProfile(username) {
+            return getOpenedProfiles().includes(username);
+        }
+
+        function applySavedTheme() {
+            const savedTheme = localStorage.getItem("theme") || "dark";
+            document.documentElement.setAttribute("data-theme", savedTheme);
+            updateThemeButton(savedTheme);
+        }
+
+        function updateThemeButton(theme) {
+            const button = document.getElementById("themeButton");
+            if (!button) return;
+            button.innerHTML = theme === "dark" ? "🌙 Tema" : "☀️ Tema";
+        }
+
+        function toggleTheme() {
+            const html = document.documentElement;
+            const currentTheme = html.getAttribute("data-theme") || "dark";
+            const newTheme = currentTheme === "light" ? "dark" : "light";
+
+            html.setAttribute("data-theme", newTheme);
+            localStorage.setItem("theme", newTheme);
+            updateThemeButton(newTheme);
+            renderChart();
+        }
+
+        function getCurrentThemeColors() {
+            const styles = getComputedStyle(document.documentElement);
+            return {
+                text: styles.getPropertyValue("--text").trim() || "#f5f7ff",
+                muted: styles.getPropertyValue("--muted").trim() || "#aeb7d4",
+                chartBorder: document.documentElement.getAttribute("data-theme") === "light" ? "#eef3ff" : "#0b1020"
+            };
+        }
+
+        function getInitialLetter(name) {
+            if (!name || !name.length) return "?";
+            return name[0].toUpperCase();
+        }
+
+        function buildUserItem(item, index) {
+            const categoryData = dataSets[currentCategory];
+            const safeItem = escapeHtml(item);
+            const firstLetter = escapeHtml(getInitialLetter(item));
+            const opened = isOpenedProfile(item);
+
+            return `
+                <div class="user-item ${opened ? "opened-user-item" : ""}">
+                    <div class="user-left">
+                        <div class="user-avatar">${firstLetter}</div>
+
+                        <div class="user-meta">
+                            <div class="user-name-row">
+                                <div class="user-name">${safeItem}</div>
+                                ${opened ? `<span class="opened-pill">Já aberto</span>` : ""}
+                            </div>
+                            <div class="user-sub">@${safeItem}</div>
+                        </div>
+                    </div>
+
+                    <div class="user-right">
+                        <span class="status-badge ${categoryData.statusClass}">
+                            ${categoryData.status}
+                        </span>
+
+                        <a
+                            href="https://www.instagram.com/${encodeURIComponent(item)}"
+                            target="_blank"
+                            class="profile-link ${opened ? "profile-link-opened" : ""}"
+                            data-username="${safeItem}"
+                        >
+                            ${opened ? "Abrir novamente ↗" : "Abrir perfil ↗"}
+                        </a>
+
+                        <span class="user-index-badge" title="Posição na lista">
+                            #${index + 1}
+                        </span>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderList(items) {
+            const userList = document.getElementById("userList");
+
+            if (!items.length) {
+                userList.innerHTML = `
+                    <div class="empty-state">
+                        Nenhum usuário encontrado nessa categoria.
+                    </div>
+                `;
+                bindProfileLinks();
+                return;
+            }
+
+            const visibleItems = expanded ? items : items.slice(0, MAX_VISIBLE);
+
+            const html = visibleItems.map((item, index) => {
+                const absoluteIndex = currentFilteredItems.indexOf(item);
+                return buildUserItem(item, absoluteIndex >= 0 ? absoluteIndex : index);
+            }).join("");
+
+            userList.innerHTML = html;
+            bindProfileLinks();
+        }
+
+        function bindProfileLinks() {
+            document.querySelectorAll(".profile-link").forEach((link) => {
+                link.addEventListener("click", function () {
+                    const username = this.getAttribute("data-username");
+                    markProfileAsOpened(username);
+
+                    setTimeout(() => {
+                        applySearch();
+                    }, 50);
+                });
+            });
+        }
+
+        function updateHeader() {
+            const categoryData = dataSets[currentCategory];
+            const usersTitle = document.getElementById("usersTitle");
+            const usersSubinfo = document.getElementById("usersSubinfo");
+            const openedCount = currentFilteredItems.filter(isOpenedProfile).length;
+
+            usersTitle.innerHTML = `
+                ${categoryData.title}
+                <span>(${formatNumber(currentFilteredItems.length)})</span>
+            `;
+
+            usersSubinfo.innerHTML = `
+                Abertos nesta lista: <strong>${formatNumber(openedCount)}</strong>
+            `;
+        }
+
+        function updateExpandButton() {
+            const toggleBtn = document.getElementById("toggleAllBtn");
+
+            if (currentFilteredItems.length <= MAX_VISIBLE) {
+                toggleBtn.style.display = "none";
+                return;
+            }
+
+            toggleBtn.style.display = "inline-flex";
+            toggleBtn.textContent = expanded ? "Recolher" : "Expandir Todos";
+        }
+
+        function updateOpenedButton() {
+            const btn = document.getElementById("showOnlyOpenedBtn");
+            btn.textContent = showOnlyOpened ? "Só abertos: On" : "Só abertos: Off";
+            btn.classList.toggle("secondary-button-active", showOnlyOpened);
+        }
+
+        function applySearch() {
+            const searchInput = document.getElementById("searchInput");
+            const term = searchInput.value.toLowerCase().trim();
+            let baseItems = [...dataSets[currentCategory].items];
+
+            if (showOnlyOpened) {
+                baseItems = baseItems.filter((item) => isOpenedProfile(item));
+            }
+
+            currentFilteredItems = baseItems.filter((item) =>
+                item.toLowerCase().includes(term)
+            );
+
+            updateHeader();
+            updateExpandButton();
+            updateOpenedButton();
+            renderList(currentFilteredItems);
+        }
+
+        function changeCategory(type) {
+            currentCategory = type;
+            expanded = false;
+
+            document.querySelectorAll(".stat-clickable").forEach((card) => {
+                card.classList.remove("active-card");
+            });
+
+            const activeCard = document.querySelector(`[data-type="${type}"]`);
+            if (activeCard) {
+                activeCard.classList.add("active-card");
+            }
+
+            applySearch();
+        }
+
+        function renderChart() {
+            const ctx = document.getElementById("followersChart");
+            const colors = getCurrentThemeColors();
+
+            if (chartInstance) {
+                chartInstance.destroy();
+            }
+
+            const centerTextPlugin = {
+                id: "centerTextPlugin",
+                afterDraw(chart) {
+                    const meta = chart.getDatasetMeta(0);
+                    if (!meta || !meta.data || !meta.data.length) return;
+
+                    const x = meta.data[0].x;
+                    const y = meta.data[0].y;
+                    const c = chart.ctx;
+
+                    c.save();
+                    c.textAlign = "center";
+                    c.textBaseline = "middle";
+
+                    c.fillStyle = colors.text;
+                    c.font = "bold 42px Arial";
+                    c.fillText(formatNumber({{ result.counts.not_following_back }}), x, y - 10);
+
+                    c.fillStyle = colors.muted;
+                    c.font = "20px Arial";
+                    c.fillText("Não te seguem", x, y + 34);
+
+                    c.restore();
+                }
+            };
+
+            chartInstance = new Chart(ctx, {
+                type: "doughnut",
+                data: {
+                    labels: ["Seguidores", "Você segue", "Não te seguem"],
+                    datasets: [{
+                        data: [
+                            {{ result.counts.followers }},
+                            {{ result.counts.following }},
+                            {{ result.counts.not_following_back }}
+                        ],
+                        backgroundColor: ["#3b82f6", "#22c55e", "#ef4444"],
+                        borderColor: colors.chartBorder,
+                        borderWidth: 6,
+                        hoverOffset: 8
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: "62%",
+                    animation: {
+                        duration: 500
+                    },
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            backgroundColor: "#111827",
+                            titleColor: "#ffffff",
+                            bodyColor: "#ffffff",
+                            borderColor: "rgba(255,255,255,0.08)",
+                            borderWidth: 1,
+                            callbacks: {
+                                label: function(context) {
+                                    return `${context.label}: ${formatNumber(context.parsed)}`;
+                                }
+                            }
+                        }
+                    }
+                },
+                plugins: [centerTextPlugin]
+            });
+        }
+
+        document.getElementById("searchInput").addEventListener("input", function () {
+            expanded = false;
+            applySearch();
+        });
+
+        document.getElementById("toggleAllBtn").addEventListener("click", function () {
+            expanded = !expanded;
+            updateExpandButton();
+            renderList(currentFilteredItems);
+        });
+
+        document.getElementById("showOnlyOpenedBtn").addEventListener("click", function () {
+            showOnlyOpened = !showOnlyOpened;
+            expanded = false;
+            applySearch();
+        });
+
+        document.getElementById("backToTopBtn").addEventListener("click", function () {
+            window.scrollTo({ top: 0, behavior: "smooth" });
+        });
+
+        window.addEventListener("scroll", function () {
+            const btn = document.getElementById("backToTopBtn");
+            if (window.scrollY > 300) {
+                btn.classList.add("floating-top-btn-show");
+            } else {
+                btn.classList.remove("floating-top-btn-show");
+            }
+        });
+
+        applySavedTheme();
+        renderChart();
+        changeCategory("not_following_back");
+    </script>
+</body>
+</html>

@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="pt-br" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analisador de Seguidores</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="bg-orb orb-1"></div>
+    <div class="bg-orb orb-2"></div>
+
+    <div class="page">
+        <header class="topbar">
+            <button class="theme-toggle" onclick="toggleTheme()" id="themeButton">
+                🌙 Tema
+            </button>
+        </header>
+
+        <main class="hero-card">
+            <section class="hero-text">
+                <span class="badge">Instagram Analyzer</span>
+
+                <h1>Descubra quem não te segue de volta</h1>
+
+                <p class="subtitle">
+                    Envie os arquivos exportados do Instagram e visualize
+                    de forma clara quem você segue, mas não te segue de volta.
+                </p>
+            </section>
+
+            <form action="/resultado" method="POST" enctype="multipart/form-data" class="upload-form">
+                <div class="input-card">
+                    <label for="followers">Arquivo followers.json</label>
+
+                    <div class="file-row">
+                        <input
+                            type="file"
+                            id="followers"
+                            name="followers"
+                            accept=".json"
+                            required
+                            onchange="updateFileName(this, 'followersFileName')"
+                        >
+
+                        <label for="followers" class="file-button blue">
+                            Escolher arquivo
+                        </label>
+
+                        <span class="file-name" id="followersFileName">
+                            Nenhum arquivo selecionado
+                        </span>
+                    </div>
+                </div>
+
+                <div class="input-card">
+                    <label for="following">Arquivo following.json</label>
+
+                    <div class="file-row">
+                        <input
+                            type="file"
+                            id="following"
+                            name="following"
+                            accept=".json"
+                            required
+                            onchange="updateFileName(this, 'followingFileName')"
+                        >
+
+                        <label for="following" class="file-button green">
+                            Escolher arquivo
+                        </label>
+
+                        <span class="file-name" id="followingFileName">
+                            Nenhum arquivo selecionado
+                        </span>
+                    </div>
+                </div>
+
+                <button type="submit" class="submit-button">
+                    Analisar
+                </button>
+            </form>
+
+            <div class="helper-box">
+                <span class="helper-icon">i</span>
+                <p>
+                    Os arquivos JSON podem ser obtidos no Instagram em:
+                    <strong>Configurações → Suas informações → Baixar informações</strong>.
+                </p>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        function applySavedTheme() {
+            const savedTheme = localStorage.getItem("theme") || "dark";
+            document.documentElement.setAttribute("data-theme", savedTheme);
+            updateThemeButton(savedTheme);
+        }
+
+        function updateThemeButton(theme) {
+            const button = document.getElementById("themeButton");
+            if (!button) return;
+            button.innerHTML = theme === "dark" ? "🌙 Tema" : "☀️ Tema";
+        }
+
+        function toggleTheme() {
+            const html = document.documentElement;
+            const currentTheme = html.getAttribute("data-theme") || "dark";
+            const newTheme = currentTheme === "light" ? "dark" : "light";
+
+            html.setAttribute("data-theme", newTheme);
+            localStorage.setItem("theme", newTheme);
+            updateThemeButton(newTheme);
+        }
+
+        function updateFileName(input, targetId) {
+            const target = document.getElementById(targetId);
+
+            if (input.files && input.files.length > 0) {
+                target.textContent = input.files[0].name;
+            } else {
+                target.textContent = "Nenhum arquivo selecionado";
+            }
+        }
+
+        applySavedTheme();
+    </script>
+</body>
+</html>
